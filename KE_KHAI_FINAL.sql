@@ -2051,3 +2051,198 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+UPDATE `KE_KHAI_FINAL` SET `MaKhachHang`='DLNH60365' WHERE `MaKhachHang` = 'S';
+
+SELECT `SoChungTu`, `MaKho` FROM `KE_KHAI_FINAL` WHERE (LEFT(`SoChungTu`, 2) = 'NH' AND `MaKho` NOT LIKE '%HOANGLIET%') OR (LEFT(`SoChungTu`, 2) = 'DL' AND `MaKho` NOT LIKE '%DENLU%') OR (LEFT(`SoChungTu`, 2) = 'TL' AND `MaKho` NOT LIKE '%THUYLINH%');
+UPDATE `KE_KHAI_FINAL` SET `TenKhachHang` = UPPER(`TenKhachHang`);
+
+ALTER TABLE `KE_KHAI_FINAL` ADD `Fix1` VARCHAR(100) AFTER `MaKhachHang`, ADD `Fix2` VARCHAR(100) AFTER `Fix1`;
+
+UPDATE `KE_KHAI_FINAL` 
+SET `Fix1` = CASE 
+-- Nếu mã đã bắt đầu bằng DL hoặc KL thì giữ nguyên 
+WHEN `MaKhachHang` LIKE 'DL%' OR `MaKhachHang` LIKE 'KL%' THEN `MaKhachHang` 
+-- Nếu chưa có, ta tự chế mã: [2 chữ đầu Tên khách] + [2 chữ đầu Số CT] + [Mã số hiện tại] 
+ELSE CONCAT( LEFT(`TenKhachHang`, 2), LEFT(`SoChungTu`, 2), `MaKhachHang` ) END;
+
+SELECT `MaKhachHang`, `TenKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_FINAL`
+WHERE `Fix1` NOT LIKE 'DL%' 
+  AND `Fix1` NOT LIKE 'KL%';
+  
+UPDATE `KE_KHAI_FINAL`
+SET `Fix1` = CONCAT(
+    -- 1. Phân loại DL/KL theo yêu cầu mới nhất
+    CASE 
+        WHEN `TenKhachHang` = 'Vũ Đức Văn' THEN 'DL'
+        WHEN `MaKhachHang` LIKE 'KH%' THEN 'DL'
+        ELSE 'KL' 
+    END,
+    -- 2. Lấy mã kho từ Số chứng từ
+    LEFT(`SoChungTu`, 2),
+    -- 3. Chỉ lấy phần SỐ từ mã khách hàng gốc
+    REGEXP_REPLACE(`MaKhachHang`, '[^0-9]', '')
+)
+WHERE `MaKhachHang` LIKE 'NV%' or  'KH%';
+
+SELECT `MaKhachHang`, `TenKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_FINAL`
+WHERE `Fix1` NOT LIKE 'DL%' 
+  AND `Fix1` NOT LIKE 'KL%';
+  
+UPDATE `KE_KHAI_FINAL`
+SET `Fix1` = CONCAT(
+    -- 1. Phân loại DL/KL theo yêu cầu mới nhất
+    CASE 
+        WHEN `MaKhachHang` LIKE 'KH%' THEN 'DL'
+    END,
+    -- 2. Lấy mã kho từ Số chứng từ
+    LEFT(`SoChungTu`, 2),
+    -- 3. Chỉ lấy phần SỐ từ mã khách hàng gốc
+    REGEXP_REPLACE(`MaKhachHang`, '[^0-9]', '')
+)
+WHERE `MaKhachHang` LIKE'KHTM01';
+
+SELECT `MaKhachHang`, `TenKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_FINAL`
+WHERE `Fix1` NOT LIKE 'DL%' 
+  AND `Fix1` NOT LIKE 'KL%';
+
+SELECT `TenKhachHang`, `MaKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_FINAL`
+WHERE `TenKhachHang` IN (
+    SELECT `TenKhachHang`
+    FROM `KE_KHAI_FINAL`
+    GROUP BY `TenKhachHang`
+    HAVING COUNT(DISTINCT `MaKhachHang`) > 1
+)
+ORDER BY `TenKhachHang`, `MaKhachHang`;
+
+UPDATE `KE_KHAI_FINAL` t1
+INNER JOIN (
+    -- Bước 1: Tìm dãy số dài nhất của những khách hàng có từ 2 mã trở lên
+    SELECT `TenKhachHang`, 
+           MAX(REGEXP_REPLACE(`MaKhachHang`, '[^0-9]', '')) AS So_Chuan
+    FROM `KE_KHAI_FINAL`
+    WHERE `TenKhachHang` IN (
+        -- Lọc danh sách khách hàng có từ 2 mã khách hàng khác nhau trở lên
+        SELECT `TenKhachHang`
+        FROM `KE_KHAI_FINAL`
+        GROUP BY `TenKhachHang`
+        HAVING COUNT(DISTINCT `MaKhachHang`) >= 2
+    )
+    GROUP BY `TenKhachHang`
+) t2 ON t1.`TenKhachHang` = t2.`TenKhachHang`
+SET t1.`Fix1` = CONCAT(
+    LEFT(t1.`Fix1`, 4), -- Giữ nguyên phần chữ (ví dụ: DLNH, DLDL, KLNH...)
+    t2.`So_Chuan`       -- Thay thế phần số bằng dãy số dài nhất tìm được
+);
+
+SELECT `TenKhachHang`, `MaKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_FINAL`
+WHERE `TenKhachHang` IN (
+    SELECT `TenKhachHang`
+    FROM `KE_KHAI_FINAL`
+    GROUP BY `TenKhachHang`
+    HAVING COUNT(DISTINCT `MaKhachHang`) > 1
+)
+ORDER BY `TenKhachHang`, `MaKhachHang`;
+
+UPDATE `KE_KHAI_FINAL` t1
+INNER JOIN (
+    -- Bước 1: Tìm dãy số dài nhất của những khách hàng có từ 2 mã trở lên
+    SELECT `TenKhachHang`, 
+           MAX(REGEXP_REPLACE(`MaKhachHang`, '[^0-9]', '')) AS So_Chuan
+    FROM `KE_KHAI_1_(fail)`
+    WHERE `TenKhachHang` IN (
+        -- Lọc danh sách khách hàng có từ 2 mã khách hàng khác nhau trở lên
+        SELECT `TenKhachHang`
+        FROM `KE_KHAI_FINAL`
+        GROUP BY `TenKhachHang`
+        HAVING COUNT(DISTINCT `MaKhachHang`) >= 2
+    )
+    GROUP BY `TenKhachHang`
+) t2 ON t1.`TenKhachHang` = t2.`TenKhachHang`
+SET t1.`Fix1` = CONCAT(
+    LEFT(t1.`Fix1`, 4), -- Giữ nguyên phần chữ (ví dụ: DLNH, DLDL, KLNH...)
+    t2.`So_Chuan`       -- Thay thế phần số bằng dãy số dài nhất tìm được
+);
+
+SELECT `TenKhachHang`, `MaKhachHang`, `SoChungTu`, `Fix1`
+FROM `KE_KHAI_1_(fail)`
+WHERE `TenKhachHang` IN (
+    SELECT `TenKhachHang`
+    FROM `KE_KHAI_1_(fail)`
+    GROUP BY `TenKhachHang`
+    HAVING COUNT(DISTINCT `MaKhachHang`) > 1
+)
+ORDER BY `TenKhachHang`, `MaKhachHang`;
+
+UPDATE `KE_KHAI_FINAL` t1
+CROSS JOIN (
+    -- Tìm độ dài phần số lớn nhất hiện có trong Fix1
+    SELECT MAX(LENGTH(REGEXP_REPLACE(`Fix1`, '[^0-9]', ''))) AS Max_Len
+    FROM `KE_KHAI_FINAL`
+) t2
+SET t1.`Fix2` = CONCAT(
+    LEFT(t1.`Fix1`, 4), -- Giữ nguyên phần chữ (DLNH, DLDL,...)
+    LPAD(
+        REGEXP_REPLACE(t1.`Fix1`, '[^0-9]', ''), -- Lấy phần số hiện tại
+        t2.Max_Len,                              -- Bù cho đủ độ dài lớn nhất
+        '0'                                      -- Bù bằng số 0
+    )
+);
+
+ALTER TABLE `KE_KHAI_FINAL` ADD `Fix_VatTu` VARCHAR(50) AFTER `MaVatTu`;
+
+UPDATE `KE_KHAI_FINAL`
+SET `Fix_VatTu` = REPLACE(`MaVatTu`, '.', '');
+
+UPDATE `KE_KHAI_FINAL` t1
+CROSS JOIN (
+    SELECT MAX(LENGTH(REPLACE(`MaVatTu`, '.', ''))) AS Max_Len
+    FROM `KE_KHAI_FINAL`
+) t2
+SET t1.`Fix_VatTu` = LPAD(REPLACE(t1.`MaVatTu`, '.', ''), t2.Max_Len, '0');
+
+SELECT 
+    `Fix_VatTu`, 
+    `TenVatTu`, 
+    SUM(`SoLuong`) AS Tong_So_Luong_Vat_Tu
+FROM `KE_KHAI_FINAL`
+GROUP BY `Fix_VatTu`, `TenVatTu`
+ORDER BY Tong_So_Luong_Vat_Tu DESC;
+
+SELECT 
+    `Fix_VatTu`, 
+    `TenVatTu`, 
+    SUM(`SoLuong`) AS Tong_So_Luong_Vat_Tu
+FROM `KE_KHAI_FINAL`
+GROUP BY `Fix_VatTu`, `TenVatTu`
+ORDER BY Tong_So_Luong_Vat_Tu DESC;
+
+UPDATE `KE_KHAI_FINAL`
+SET 
+    `TongtienThanhToan_1` = `TienHang_1` - `TienChuyenKhoan_1` - `TienThue_1`;
+
+UPDATE `KE_KHAI_FINAL`
+SET 
+    `TienHang_2` = `Soluong`* `Giaban`, 
+    `TongTienThanhToan_2` = `TienHang_2` - `TienChuyenKhoan_2` - `TienThue_2`;
+
+UPDATE KE_KHAI_FINAL 
+SET `NgayChungTu` = STR_TO_DATE(`NgayChungTu`, '%d/%m/%Y');
+
+DELETE FROM `KE_KHAI_FINAL` WHERE `Loai_Hang_Hoa`='dữ liệu rác';
+
+ALTER TABLE KE_KHAI_FINAL 
+DROP COLUMN `MaKhachHang`,
+DROP COLUMN `Fix1`,
+DROP COLUMN `MaVatTu`;
+
+ALTER TABLE `KE_KHAI_FINAL` 
+CHANGE `Fix2` `MaKhachHang` VARCHAR(100);
+
+ALTER TABLE `KE_KHAI_FINAL` 
+CHANGE `Fix_VatTu` `MaVatTu` VARCHAR(100);
